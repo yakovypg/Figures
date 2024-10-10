@@ -1,0 +1,49 @@
+# Все настройки и их описание были в документации:
+  # https://kubernetes.io/docs/concepts/workloads/controllers/deployment/
+  # https://kubernetes.io/docs/concepts/overview/working-with-objects/
+  # https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/
+  # https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/
+  # https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+  # https://kubernetes.io/docs/tasks/configure-pod-container/assign-cpu-resource/
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: webapp-deployment
+spec:
+  replicas: 3 # задаем количество реплик в 3 пода, така как они успешно справляются с нагрузкой
+  selector: # с помощью селектора отличаем свои поды от чужих (если на поде есть метка "app: webapp" => он свой)
+    matchLabels:
+      app: webapp
+  template: # с помощью шаблона описываем, как создаем под, если тот еще не существует или упал
+    metadata:
+      labels: # задаем метку
+        app: webapp
+    spec:
+      affinity:
+        podAntiAffinity: # используем podAntiAffinity, так как хотим, чтобы поды были размещены на разных нодах
+          requiredDuringSchedulingIgnoredDuringExecution: # хотим быть уверенными, что два пода не смогут оказаться на одном и том же узле, поэтому используем requiredDuringScheduling, а не 
+            - labelSelector: # селектор с выражением для выборки подов, к которым будут применены affinity-правила
+                matchExpressions:
+                  - key: app
+                    operator: In
+                    values:
+                      - webapp
+              topologyKey: "kubernetes.io/hostname" # предотвращение размещения двух подов, соответствующих labelSelector, на одном узле
+      containers:
+        - name: webapp-containeer
+          image: webapp-image:latest
+          resources: # указываем запрашиваемые ресурсы для CPU и памяти
+            requests: # задаем необходимые ресурсы
+              memory: "128M" # минимальное потребление в районе 128M, поэтому оно и задано
+              cpu: "0.1" # минимальное потребление в районе 0.1 CPU, поэтому оно и задано
+            limits: # задаем ограничения на пиковое использование
+              memory: "160M" # потребление памяти в районе 128M, однако "в районе" не гарантирует, что потребление не будет немного больше => делаем небольшой запас
+              cpu: "1" # на первые запросы требуется значительно больше ресурсов CPU => выставляем значительно больше, чем 0.1 CPU
+          readinessProbe: # проверка готовности, которая не позволит поду обрабатывать запросы до завершения инициализации (предполагается, что приложение создает файл /tmp/ready после завершения инициализации)
+            exec:
+              command:
+                - cat
+                - /tmp/ready # если команда 'cat /tmp/ready' выполнена успешно, она возвращает 0, и контейнер считается живым и работоспособным
+            initialDelaySeconds: 10 # задержка перед проверкой готовности (даем 10 секунд на инициализацию)
+            periodSeconds: 2 # далее выполняем проверку готовности каждые 2 секунды (если вдруг за 10 секунд инициализация не прошла)
