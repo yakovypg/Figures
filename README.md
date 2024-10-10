@@ -7,6 +7,10 @@ Follow these steps:
   ```
   git clone https://github.com/yakovypg/Figures.git
   ```
+- Open created folder.
+  ```
+  cd Figures
+  ```
 - Build solution.
   ```
   dotnet build
